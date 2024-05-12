@@ -11,5 +11,6 @@ RUN sed -i -e 's/# de_DE.UTF-8 UTF-8/de_DE.UTF-8 UTF-8/' /etc/locale.gen \
  && locale-gen
 
 RUN pip install -r requirements.txt
+ENV TZ=Europe/Berlin
 
-CMD [ "python3", "main.py" ]
+CMD [ "python3", "-u", "main.py" ]

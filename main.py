@@ -43,7 +43,7 @@ async def close_mensa():
     await change_presence('closed')
 
 
-@tasks.loop(time=time(hour=21, minute=30, tzinfo=local_tz), count=None)
+@tasks.loop(time=time(hour=9, minute=0, tzinfo=local_tz), count=None)
 async def send_menu():
     channel = bot.get_channel(int(os.getenv("CHANNEL_ID")))
     menu = get_menu_from_url()
@@ -87,7 +87,6 @@ def get_menu_from_url():
     
     # extract day menu
     heute = datetime.now().strftime('%A')
-    heute = 'Montag'
     print(datetime.now())
     if heute in ['Samstag', 'Sonntag']:
         return
