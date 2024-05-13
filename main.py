@@ -19,6 +19,14 @@ URL = os.getenv("URL")
 intents = discord.Intents.all()
 bot = commands.Bot(intents=intents, command_prefix='/')
 awake = True
+debug_times = [
+    time(hour=7, minute=0, tzinfo=local_tz),
+    time(hour=8, minute=0, tzinfo=local_tz),
+    time(hour=8, minute=30, tzinfo=local_tz),
+    time(hour=9, minute=0, tzinfo=local_tz),
+    time(hour=12, minute=45, tzinfo=local_tz),
+    time(hour=14, minute=0, tzinfo=local_tz),
+]
 
 ### bot events
 @bot.event
@@ -67,6 +75,17 @@ async def send_menu():
         await channel.send(menu)
 
 
+# debug loop
+@tasks.loop(time=debug_times, count=None)
+async def debug_menu():
+    channel = bot.get_channel(int(os.getenv("DEBUG_CHANNEL_ID")))
+    menu = get_menu_from_url()
+    if menu:
+        await channel.send(menu)
+    else:
+        await channel.send('Kein Menü verfügbar.')
+
+
 @bot.command(name='menu')
 @commands.is_owner()
 async def menu(ctx):
@@ -82,6 +101,7 @@ async def menu(ctx):
 async def sleep(ctx):
     if awake:
         send_menu.stop()
+        awake = False
         await ctx.send('Bot is now sleeping.')
 
 @bot.command(name='wake')
@@ -89,6 +109,7 @@ async def sleep(ctx):
 async def wake(ctx):
     if not awake:
         send_menu.start()
+        awake = True
         await ctx.send('Bot is now awake.')
 
 
