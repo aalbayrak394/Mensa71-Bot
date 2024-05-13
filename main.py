@@ -10,6 +10,7 @@ import locale
 ### configs
 locale.setlocale(locale.LC_TIME, 'de_DE.UTF-8')
 local_tz = datetime.now().astimezone().tzinfo
+print(f'local timezone: {local_tz}')
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -17,6 +18,7 @@ URL = os.getenv("URL")
 
 intents = discord.Intents.all()
 bot = commands.Bot(intents=intents, command_prefix='/')
+awake = True
 
 ### bot events
 @bot.event
@@ -24,10 +26,23 @@ async def on_ready():
     print(f'Logged in as {bot.user.name}')
 
     await change_presence('closed')
+    
+    if not send_menu.is_running():
+        send_menu.start()
 
-    send_menu.start()
-    open_mensa.start()
-    close_mensa.start()
+    if not open_mensa.is_running():
+        open_mensa.start()
+
+    if not close_mensa.is_running():
+        close_mensa.start()
+
+    if not debug.is_running():
+        debug.start()
+
+@tasks.loop(minutes=10, count=None)
+async def debug():
+    channel = bot.get_channel(int(os.getenv("DEBUG_CHANNEL_ID")))
+    await channel.send(f'Debug loop at: {datetime.now()}')
 
 
 @tasks.loop(time=time(hour=11, minute=30, tzinfo=local_tz), count=None)
@@ -45,6 +60,7 @@ async def close_mensa():
 
 @tasks.loop(time=time(hour=9, minute=0, tzinfo=local_tz), count=None)
 async def send_menu():
+    print('Sending menu...')
     channel = bot.get_channel(int(os.getenv("CHANNEL_ID")))
     menu = get_menu_from_url()
     if menu:
@@ -52,12 +68,34 @@ async def send_menu():
 
 
 @bot.command(name='menu')
+@commands.is_owner()
 async def menu(ctx):
     menu = get_menu_from_url()
     if menu:
         await ctx.send(menu)
     else:
         await ctx.send('Die Mensa hat heute geschlossen.')
+
+
+@bot.command(name='sleep')
+@commands.is_owner()
+async def sleep(ctx):
+    if awake:
+        send_menu.stop()
+        await ctx.send('Bot is now sleeping.')
+
+@bot.command(name='wake')
+@commands.is_owner()
+async def wake(ctx):
+    if not awake:
+        send_menu.start()
+        await ctx.send('Bot is now awake.')
+
+
+@bot.command(name='status')
+@commands.is_owner()
+async def status(ctx):
+    await ctx.send(f'Bot is {"awake" if awake else "sleeping"}.')
 
 
 async def change_presence(status: str):
