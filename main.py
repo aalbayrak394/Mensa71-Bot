@@ -1,6 +1,6 @@
 import os, locale
 from dotenv import load_dotenv
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 import discord
 from discord.ext import tasks, commands
@@ -47,6 +47,19 @@ async def on_ready():
     if not log.is_running():
         log.start()
 
+    if not clear_log_history.is_running():
+        clear_log_history.start()
+
+
+@tasks.loop(hours=6, count=None)
+async def clear_log_history():
+    channel = bot.get_channel(int(os.getenv("DEBUG_CHANNEL_ID")))
+    log_messages = [
+        message async for message in channel.history(before=datetime.now() - timedelta(hours=24))
+    ]
+    await channel.delete_messages(log_messages)
+    print('Cleared log history.')
+
 
 @tasks.loop(time=checking_times, count=None)
 async def check_mensa_status():
@@ -54,17 +67,17 @@ async def check_mensa_status():
     if status == -1:
        await bot.change_presence(
             status=discord.Status.do_not_disturb,
-            activity=discord.CustomActivity("Closed. Reopening at 11:30.")
+            activity=discord.CustomActivity(STATUS_CLOSED)
         )
     elif status == 0:
         await bot.change_presence(
             status=discord.Status.idle,
-            activity=discord.CustomActivity("☕️ @ Café71")
+            activity=discord.CustomActivity(STATUS_CAFE)
         )
     elif status == 1:
         await bot.change_presence(
             status=discord.Status.online,
-            activity=discord.CustomActivity("🍝 Eating")
+            activity=discord.CustomActivity(STATUS_SERVING)
         )
 
 
@@ -88,7 +101,7 @@ async def log():
         else:
             await channel.send('Kein Menü verfügbar.')
     else:
-        await channel.send(f'Debug loop at: {now.time.strftime("%H:%M:%S")}')
+        await channel.send(f'`{now.strftime("%H:%M:%S")}: client UP`')
 
 
 @bot.command(name='menu')
@@ -131,12 +144,7 @@ def get_menu_from_url():
     
     # find menu element
     speiseplan = soup.find('div', class_='speiseplan')
-    mensakopf = speiseplan.find('div', class_='mensakopf')
     
-    # extract date
-    datum_raw = mensakopf.find('h3', class_='kw').text.split('-')[0].strip()
-    datum = datetime.strptime(datum_raw, '%d.%m.%Y')
-
     heute = datetime.now()
     wochentag = heute.strftime('%A')
     
@@ -161,7 +169,7 @@ def get_menu_from_url():
         prices = item.find('p', class_='preise').text.strip().replace('\n', ' ').replace('\t', '')
         tagesmenu += f'> **{title}**\n> {description}\n> {prices}\n\n'
     
-    return f'**Speiseplan für den {datum.strftime("%d.%m.%Y")}:**\n{tagesmenu}'
+    return f'**Speiseplan für den {heute.strftime("%d.%m.%Y")}:**\n{tagesmenu}'
 
 
 if __name__ == '__main__':
