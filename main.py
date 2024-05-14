@@ -155,6 +155,7 @@ def get_menu_from_url():
     
     tag = speiseplan.find('div', class_='tab_' + wochentag)
     tagesmenu_raw = tag.find('ul').find_all('li')
+    day_string = tag.find('a').text.strip()
     
     # format menu
     tagesmenu = ''
@@ -169,7 +170,7 @@ def get_menu_from_url():
         prices = item.find('p', class_='preise').text.strip().replace('\n', ' ').replace('\t', '')
         tagesmenu += f'> **{title}**\n> {description}\n> {prices}\n\n'
     
-    return f'**Speiseplan für den {heute.strftime("%d.%m.%Y")}:**\n{tagesmenu}'
+    return f'**Speiseplan für {day_string}**\n{tagesmenu}'
 
 
 if __name__ == '__main__':
