@@ -1,11 +1,13 @@
-import os
+import os, locale
+from dotenv import load_dotenv
+from datetime import datetime, time
+
 import discord
 from discord.ext import tasks, commands
-from dotenv import load_dotenv
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, time
-import locale
+
+from utils import get_mensa_status
 
 ### configs
 locale.setlocale(locale.LC_TIME, 'de_DE.UTF-8')
@@ -19,51 +21,51 @@ URL = os.getenv("URL")
 intents = discord.Intents.all()
 bot = commands.Bot(intents=intents, command_prefix='/')
 awake = True
-debug_times = [
-    time(hour=7, minute=0, tzinfo=local_tz),
+
+checking_times = [
     time(hour=8, minute=0, tzinfo=local_tz),
-    time(hour=8, minute=30, tzinfo=local_tz),
-    time(hour=9, minute=0, tzinfo=local_tz),
-    time(hour=12, minute=45, tzinfo=local_tz),
+    time(hour=11, minute=30, tzinfo=local_tz),
     time(hour=14, minute=0, tzinfo=local_tz),
+    time(hour=15, minute=0, tzinfo=local_tz)
 ]
 
-### bot events
+STATUS_CLOSED = 'Closed. Reopening at 11:30.'
+STATUS_SERVING = '🍝 Eating'
+STATUS_CAFE = '☕️ @ Café71'
+
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name}')
-
-    await change_presence('closed')
     
     if not send_menu.is_running():
         send_menu.start()
 
-    if not open_mensa.is_running():
-        open_mensa.start()
+    if not check_mensa_status.is_running():
+        check_mensa_status.start()
 
-    if not close_mensa.is_running():
-        close_mensa.start()
-
-    if not debug.is_running():
-        debug.start()
-
-@tasks.loop(minutes=10, count=None)
-async def debug():
-    channel = bot.get_channel(int(os.getenv("DEBUG_CHANNEL_ID")))
-    await channel.send(f'Debug loop at: {datetime.now()}')
+    if not log.is_running():
+        log.start()
 
 
-@tasks.loop(time=time(hour=11, minute=30, tzinfo=local_tz), count=None)
-async def open_mensa():
-    today = datetime.now()
-    if today.weekday() in [5, 6]:
-        return
-    await change_presence('open')
-
-
-@tasks.loop(time=time(hour=14, minute=0, tzinfo=local_tz), count=None)
-async def close_mensa():
-    await change_presence('closed')
+@tasks.loop(time=checking_times, count=None)
+async def check_mensa_status():
+    status = get_mensa_status(datetime.now())
+    if status == -1:
+       await bot.change_presence(
+            status=discord.Status.do_not_disturb,
+            activity=discord.CustomActivity("Closed. Reopening at 11:30.")
+        )
+    elif status == 0:
+        await bot.change_presence(
+            status=discord.Status.idle,
+            activity=discord.CustomActivity("☕️ @ Café71")
+        )
+    elif status == 1:
+        await bot.change_presence(
+            status=discord.Status.online,
+            activity=discord.CustomActivity("🍝 Eating")
+        )
 
 
 @tasks.loop(time=time(hour=9, minute=0, tzinfo=local_tz), count=None)
@@ -75,15 +77,18 @@ async def send_menu():
         await channel.send(menu)
 
 
-# debug loop
-@tasks.loop(time=debug_times, count=None)
-async def debug_menu():
+@tasks.loop(minutes=10, count=None)
+async def log():
     channel = bot.get_channel(int(os.getenv("DEBUG_CHANNEL_ID")))
-    menu = get_menu_from_url()
-    if menu:
-        await channel.send(menu)
+    now = datetime.now().time()
+    if now.minute == 0:
+        menu = get_menu_from_url()
+        if menu:
+            await channel.send(menu)
+        else:
+            await channel.send('Kein Menü verfügbar.')
     else:
-        await channel.send('Kein Menü verfügbar.')
+        await channel.send(f'Debug loop at: {now.time.strftime("%H:%M:%S")}')
 
 
 @bot.command(name='menu')
@@ -104,6 +109,7 @@ async def sleep(ctx):
         awake = False
         await ctx.send('Bot is now sleeping.')
 
+
 @bot.command(name='wake')
 @commands.is_owner()
 async def wake(ctx):
@@ -119,19 +125,6 @@ async def status(ctx):
     await ctx.send(f'Bot is {"awake" if awake else "sleeping"}.')
 
 
-async def change_presence(status: str):
-    if status == 'open':
-        await bot.change_presence(
-            status=discord.Status.online,
-            activity=discord.CustomActivity("🍝 Eating")
-        )
-    elif status == 'closed':
-        await bot.change_presence(
-            status=discord.Status.do_not_disturb,
-            activity=discord.CustomActivity("Closed. Reopening at 11:30.")
-        )
-
-
 def get_menu_from_url():
     page = requests.get(URL)
     soup = BeautifulSoup(page.content, 'html.parser')
@@ -143,14 +136,16 @@ def get_menu_from_url():
     # extract date
     datum_raw = mensakopf.find('h3', class_='kw').text.split('-')[0].strip()
     datum = datetime.strptime(datum_raw, '%d.%m.%Y')
+
+    heute = datetime.now()
+    wochentag = heute.strftime('%A')
     
     # extract day menu
-    heute = datetime.now().strftime('%A')
-    print(datetime.now())
-    if heute in ['Samstag', 'Sonntag']:
+    if heute.weekday() in [5, 6]:
+        # no menu on weekends
         return
     
-    tag = speiseplan.find('div', class_='tab_' + heute)
+    tag = speiseplan.find('div', class_='tab_' + wochentag)
     tagesmenu_raw = tag.find('ul').find_all('li')
     
     # format menu
