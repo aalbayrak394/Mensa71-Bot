@@ -9,7 +9,7 @@ def get_mensa_status(datetime: datetime) -> int:
         # Mensa is open
         return 1
     
-    if 8 <= datetime.hour <= 15:
+    if 8 <= datetime.hour < 15:
         # Café71 is open
         return 0
     

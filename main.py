@@ -97,7 +97,7 @@ async def log():
     if now.minute == 0:
         menu = get_menu_from_url()
         if menu:
-            await channel.send(menu)
+            await channel.send(embed=menu)
         else:
             await channel.send('Kein Menü verfügbar.')
     else:
@@ -109,7 +109,7 @@ async def log():
 async def menu(ctx):
     menu = get_menu_from_url()
     if menu:
-        await ctx.send(menu)
+        await ctx.send(embed=menu)
     else:
         await ctx.send('Die Mensa hat heute geschlossen.')
 
@@ -158,8 +158,13 @@ def get_menu_from_url():
     day_string = tag.find('a').text.strip()
     
     # format menu
-    tagesmenu = ''
-    for item in tagesmenu_raw:
+    embed = discord.Embed(
+        title=f'Speiseplan für {day_string}',
+        url=URL,
+        color=0xfec30a
+    )
+
+    for idx, item in enumerate(tagesmenu_raw):
         title_raw = item.find('h5').text.split('(')
         title = []
         for title_item in title_raw:
@@ -168,9 +173,20 @@ def get_menu_from_url():
         title = ' ('.join(title)
         description = item.find('p', class_='essen').find('strong').text.strip()
         prices = item.find('p', class_='preise').text.strip().replace('\n', ' ').replace('\t', '')
-        tagesmenu += f'> **{title}**\n> {description}\n> {prices}\n\n'
-    
-    return f'**Speiseplan für {day_string}**\n{tagesmenu}'
+
+        embed.add_field(
+            name=f':salad: {title}' if idx == 3 else title,
+            value=f'{description}\n{prices}',
+            inline=False
+        )
+        embed.add_field(
+            name='\u200b',
+            value='',
+            inline=False
+        )
+
+    embed.set_footer(text='Essensausgabe: 11:30 - 14:00 Uhr')
+    return embed
 
 
 if __name__ == '__main__':
