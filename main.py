@@ -87,7 +87,8 @@ async def send_menu():
     channel = bot.get_channel(int(os.getenv("CHANNEL_ID")))
     menu = get_menu_from_url()
     if menu:
-        await channel.send(menu)
+        await channel.send(embed=menu)
+
 
 
 @tasks.loop(minutes=10, count=None)
