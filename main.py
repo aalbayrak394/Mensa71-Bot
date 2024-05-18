@@ -29,7 +29,7 @@ checking_times = [
     time(hour=15, minute=0, tzinfo=local_tz)
 ]
 
-STATUS_CLOSED = 'Closed. Reopening at 11:30.'
+STATUS_CLOSED = 'Closed'
 STATUS_SERVING = '🍝 Eating'
 STATUS_CAFE = '☕️ @ Café71'
 
@@ -157,6 +157,10 @@ def get_menu_from_url():
     tag = speiseplan.find('div', class_='tab_' + wochentag)
     tagesmenu_raw = tag.find('ul').find_all('li')
     day_string = tag.find('a').text.strip()
+
+    # no menu on holidays
+    if "Feiertag" in tagesmenu_raw[0].text.strip():
+        return
     
     # format menu
     embed = discord.Embed(
