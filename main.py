@@ -85,6 +85,14 @@ async def check_mensa_status():
 async def send_menu():
     print('Sending menu...')
     channel = bot.get_channel(int(os.getenv("CHANNEL_ID")))
+
+    # delete previous menu messages
+    menu_messages = [
+        message async for message in channel.history(before=datetime.now())
+    ]
+    await channel.delete_messages(menu_messages)
+
+    # send menu for today
     menu = get_menu_from_url()
     if menu:
         await channel.send(embed=menu)
@@ -159,7 +167,7 @@ def get_menu_from_url():
     day_string = tag.find('a').text.strip()
 
     # no menu on holidays
-    if "Feiertag" in tagesmenu_raw[0].text.strip():
+    if "geschlossen" in tagesmenu_raw[0].text.strip():
         return
     
     # format menu
