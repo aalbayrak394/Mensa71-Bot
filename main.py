@@ -4,12 +4,11 @@ from datetime import datetime, time, timedelta
 
 import discord
 from discord.ext import tasks, commands
-import requests
-from bs4 import BeautifulSoup
 
-from utils import get_mensa_status
+from utils import get_mensa_status, get_menu_from_url
 
-### configs
+
+### Configs & Constants
 locale.setlocale(locale.LC_TIME, 'de_DE.UTF-8')
 local_tz = datetime.now().astimezone().tzinfo
 print(f'local timezone: {local_tz}')
@@ -20,7 +19,6 @@ URL = os.getenv("URL")
 
 intents = discord.Intents.all()
 bot = commands.Bot(intents=intents, command_prefix='/')
-awake = True
 
 checking_times = [
     time(hour=8, minute=0, tzinfo=local_tz),
@@ -34,6 +32,7 @@ STATUS_SERVING = '🍝 Eating'
 STATUS_CAFE = '☕️ @ Café71'
 
 
+### Bot events
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name}')
@@ -86,17 +85,11 @@ async def send_menu():
     print('Sending menu...')
     channel = bot.get_channel(int(os.getenv("CHANNEL_ID")))
 
-    # delete previous menu messages
-    menu_messages = [
-        message async for message in channel.history(before=datetime.now())
-    ]
-    await channel.delete_messages(menu_messages)
-
     # send menu for today
-    menu = get_menu_from_url()
+    menu = get_menu_from_url(URL)
     if menu:
-        await channel.send(embed=menu)
-
+        msg = await channel.send(embed=menu)
+        await msg.publish()
 
 
 @tasks.loop(minutes=10, count=None)
@@ -104,7 +97,7 @@ async def log():
     channel = bot.get_channel(int(os.getenv("DEBUG_CHANNEL_ID")))
     now = datetime.now().time()
     if now.minute == 0:
-        menu = get_menu_from_url()
+        menu = get_menu_from_url(URL)
         if menu:
             await channel.send(embed=menu)
         else:
@@ -116,90 +109,11 @@ async def log():
 @bot.command(name='menu')
 @commands.is_owner()
 async def menu(ctx):
-    menu = get_menu_from_url()
+    menu = get_menu_from_url(URL)
     if menu:
         await ctx.send(embed=menu)
     else:
         await ctx.send('Die Mensa hat heute geschlossen.')
-
-
-@bot.command(name='sleep')
-@commands.is_owner()
-async def sleep(ctx):
-    if awake:
-        send_menu.stop()
-        awake = False
-        await ctx.send('Bot is now sleeping.')
-
-
-@bot.command(name='wake')
-@commands.is_owner()
-async def wake(ctx):
-    if not awake:
-        send_menu.start()
-        awake = True
-        await ctx.send('Bot is now awake.')
-
-
-@bot.command(name='status')
-@commands.is_owner()
-async def status(ctx):
-    await ctx.send(f'Bot is {"awake" if awake else "sleeping"}.')
-
-
-def get_menu_from_url():
-    page = requests.get(URL)
-    soup = BeautifulSoup(page.content, 'html.parser')
-    
-    # find menu element
-    speiseplan = soup.find('div', class_='speiseplan')
-    
-    heute = datetime.now()
-    wochentag = heute.strftime('%A')
-    
-    # extract day menu
-    if heute.weekday() in [5, 6]:
-        # no menu on weekends
-        return
-    
-    tag = speiseplan.find('div', class_='tab_' + wochentag)
-    tagesmenu_raw = tag.find('ul').find_all('li')
-    day_string = tag.find('a').text.strip()
-
-    # no menu on holidays
-    if "geschlossen" in tagesmenu_raw[0].text.strip():
-        return
-    
-    # format menu
-    embed = discord.Embed(
-        title=f'Speiseplan für {day_string}',
-        url=URL,
-        color=0xfec30a
-    )
-
-    for idx, item in enumerate(tagesmenu_raw):
-        title_raw = item.find('h5').text.split('(')
-        title = []
-        for title_item in title_raw:
-            title.append(title_item.strip())
-
-        title = ' ('.join(title)
-        description = item.find('p', class_='essen').find('strong').text.strip()
-        prices = item.find('p', class_='preise').text.strip().replace('\n', ' ').replace('\t', '')
-
-        embed.add_field(
-            name=f':salad: {title}' if idx == 3 else title,
-            value=f'{description}\n{prices}',
-            inline=False
-        )
-        embed.add_field(
-            name='\u200b',
-            value='',
-            inline=False
-        )
-
-    embed.set_footer(text='Essensausgabe: 11:30 - 14:00 Uhr')
-    return embed
 
 
 if __name__ == '__main__':
