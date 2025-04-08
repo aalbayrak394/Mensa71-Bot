@@ -3,7 +3,8 @@ from dotenv import load_dotenv
 from datetime import datetime, time, timedelta
 
 import discord
-from discord.ext import tasks, commands
+from discord.ext import tasks
+from discord import app_commands
 
 from utils import get_mensa_status, get_menu_from_url
 
@@ -17,8 +18,8 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 URL = os.getenv("URL")
 
-intents = discord.Intents.all()
-bot = commands.Bot(intents=intents, command_prefix='/')
+bot = discord.Client(command_prefix='!', intents=discord.Intents.all())
+tree = app_commands.CommandTree(bot)
 
 checking_times = [
     time(hour=8, minute=0, tzinfo=local_tz),
@@ -36,6 +37,12 @@ STATUS_CAFE = '☕️ @ Café71'
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name}')
+
+    try:
+        synced = await tree.sync()
+        print(f'Synced {len(synced)} commands.')
+    except Exception as e:
+        print(f'Error syncing commands: {e}')
     
     if not send_menu.is_running():
         send_menu.start()
@@ -106,14 +113,18 @@ async def log():
         await channel.send(f'`{now.strftime("%H:%M:%S")}: client UP`')
 
 
-@bot.command(name='menu')
-@commands.is_owner()
-async def menu(ctx):
+@tree.command(name='hello', description='Say hello')
+async def hello(interaction: discord.Interaction):
+    await interaction.response.send_message('Hello, World!')
+
+
+@tree.command(name='menu', description='Get the menu for today')
+async def menu(interaction: discord.Interaction):
     menu = get_menu_from_url(URL)
     if menu:
-        await ctx.send(embed=menu)
+        await interaction.response.send_message(embed=menu)
     else:
-        await ctx.send('Die Mensa hat heute geschlossen.')
+        await interaction.response.send_message('Die Mensa hat heute geschlossen.')
 
 
 if __name__ == '__main__':

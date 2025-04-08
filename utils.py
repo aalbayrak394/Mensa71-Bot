@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import discord
 from bs4 import BeautifulSoup
 import requests
